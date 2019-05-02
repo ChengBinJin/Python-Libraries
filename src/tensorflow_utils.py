@@ -4,15 +4,9 @@
 # Written by Cheng-Bin Jin
 # Email: sbkim0407@gmail.com
 # ---------------------------------------------------------
-import os
-import logging
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.training import moving_averages
-
-
-logger = logging.getLogger(__name__)  # logger
-logger.setLevel(logging.INFO)
 
 
 def init_logger(log_path):
@@ -261,24 +255,31 @@ def xavier_init(in_dim):
     return xavier_stddev
 
 
-def print_activations(t):
-    # print(t.op.name, ' ', t.get_shape().as_list())
-    logger.info(t.op.name + '{}'.format(t.get_shape().as_list()))
+def print_activations(t, logger=None):
+	if logger is None:
+    	print(t.op.name, ' ', t.get_shape().as_list())
+    else:
+    	logger.info(t.op.name + '{}'.format(t.get_shape().as_list()))
 
 
-def show_all_variables():
+def show_all_variables(logger=None):
     total_count = 0
+
     for idx, op in enumerate(tf.trainable_variables()):
         shape = op.get_shape()
         count = np.prod(shape)
-        logger.info("[%2d] %s %s = %s" % (idx, op.name, shape, count))
+
+        if logger is None:
+            print("[%2d] %s %s = %s" % (idx, op.name, shape, count))
+        else:
+            logger.info("[%2d] %s %s = %s" % (idx, op.name, shape, count))
+
         total_count += int(count)
-    logger.info("[Total] variable size: %s" % "{:,}".format(total_count))
 
-
-def batch_convert2int(images):
-    # images: 4D float tensor (batch_size, image_size, image_size, depth)
-    return tf.map_fn(convert2int, images, dtype=tf.uint8)
+    if logger is None:
+        print("[Total] variable size: %s" % "{:,}".format(total_count))
+    else:
+        logger.info("[Total] variable size: %s" % "{:,}".format(total_count))
 
 
 def convert2int(image):
