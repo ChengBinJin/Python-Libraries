@@ -14,11 +14,17 @@ def padding2d(x, p_h=1, p_w=1, pad_type='REFLECT', name='pad2d'):
         return tf.pad(x, [[0, 0], [p_h, p_h], [p_w, p_w], [0, 0]], 'REFLECT', name=name)
 
 
-def conv2d(x, output_dim, k_h=5, k_w=5, d_h=2, d_w=2, stddev=0.02, padding='SAME', name='conv2d', is_print=True,
-           logger=None):
+def conv2d(x, output_dim, k_h=5, k_w=5, d_h=2, d_w=2, stddev=0.02, initializer=None, padding='SAME', name='conv2d',
+           is_print=True, logger=None):
     with tf.variable_scope(name):
-        w = tf.get_variable('w', [k_h, k_w, x.get_shape()[-1], output_dim],
-                            initializer=tf.truncated_normal_initializer(stddev=stddev))
+        if initializer is None:
+            init_op = tf.truncated_normal_initializer(stddev=stddev)
+        elif initializer == 'He':
+            init_op = tf.initializers.he_normal()
+        else:
+            raise NotImplementedError
+
+        w = tf.get_variable('w', [k_h, k_w, x.get_shape()[-1], output_dim], initializer=init_op)
         conv = tf.nn.conv2d(x, w, strides=[1, d_h, d_w, 1], padding=padding)
 
         biases = tf.get_variable('biases', [output_dim], initializer=tf.constant_initializer(0.0))
@@ -31,8 +37,8 @@ def conv2d(x, output_dim, k_h=5, k_w=5, d_h=2, d_w=2, stddev=0.02, padding='SAME
         return conv
 
 
-def deconv2d(x, k, k_h=3, k_w=3, d_h=2, d_w=2, stddev=0.02, padding_='SAME', output_size=None,
-             name='deconv2d', with_w=False, is_print=True, logger=None):
+def deconv2d(x, output_dim, k_h=3, k_w=3, d_h=2, d_w=2, stddev=0.02, initializer=None, padding_='SAME',
+             output_size=None, name='deconv2d', with_w=False, is_print=True, logger=None):
     with tf.variable_scope(name):
         input_shape = x.get_shape().as_list()
 
@@ -41,13 +47,17 @@ def deconv2d(x, k, k_h=3, k_w=3, d_h=2, d_w=2, stddev=0.02, padding_='SAME', out
         if not output_size:
             h_output, w_output = input_shape[1] * 2, input_shape[2] * 2
         # output_shape = [input_shape[0], h_output, w_output, k]  # error when not define batch_size
-        output_shape = [tf.shape(x)[0], h_output, w_output, k]
+        output_shape = [tf.shape(x)[0], h_output, w_output, output_dim]
 
         # conv2d transpose
-        w = tf.get_variable('w', [k_h, k_w, k, input_shape[3]],
-                            initializer=tf.random_normal_initializer(stddev=stddev))
-        deconv = tf.nn.conv2d_transpose(x, w, output_shape=output_shape, strides=[1, d_h, d_w, 1],
-                                        padding=padding_)
+        if initializer is None:
+            init_op = tf.random_normal_initializer(stddev=stddev)
+        elif initializer == 'He':
+            init_op = tf.initializers.he_normal()
+        else:
+            raise NotImplementedError
+        w = tf.get_variable('w', [k_h, k_w, output_dim, input_shape[3]], initializer=init_op)
+        deconv = tf.nn.conv2d_transpose(x, w, output_shape=output_shape, strides=[1, d_h, d_w, 1], padding=padding_)
 
         biases = tf.get_variable('biases', [output_shape[-1]], initializer=tf.constant_initializer(0.0))
         deconv = tf.nn.bias_add(deconv, biases)
@@ -59,6 +69,15 @@ def deconv2d(x, k, k_h=3, k_w=3, d_h=2, d_w=2, stddev=0.02, padding_='SAME', out
             return deconv, w, biases
         else:
             return deconv
+
+
+def concat(values, axis, name='concat', is_print=True, logger=None):
+    output = tf.concat(values=values, axis=axis, name=name)
+
+    if is_print:
+        print_activations(output, logger)
+
+    return output
 
 
 def upsampling2d(x, size=(2, 2), name='upsampling2d'):
@@ -216,10 +235,17 @@ def max_pool(x, name='max_pool', ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], is_pr
     return output
 
 def dropout(x, keep_prob=0.5, seed=None, name='dropout', is_print=True, logger=None):
-    output = tf.nn.dropout(x=x,
-                           keep_prob=keep_prob,
-                           seed=tf.set_random_seed(seed) if seed else None,
-                           name=name)
+    try:
+        output = tf.nn.dropout(x=x,
+                               rate=keep_prob,
+                               seed=tf.set_random_seed(seed) if seed else None,
+                               name=name)
+    except(RuntimeError, TypeError, NameError):
+        print('[*] Catch the dropout function Error!')
+        output = tf.nn.dropout(x=x,
+                               keep_prob=keep_prob,
+                               seed=tf.set_random_seed(seed) if seed else None,
+                               name=name)
 
     if is_print:
         print_activations(output, logger)
